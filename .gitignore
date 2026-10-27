@@ -1,0 +1,8 @@
+.venv/
+__pycache__/
+*.db
+*.db-*
+.terraform/
+*.tfstate*
+.pytest_cache/
+results/

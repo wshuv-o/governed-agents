@@ -1,0 +1,80 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        db: [sqlite, postgres]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: ${{ matrix.db == 'postgres' && 'postgresql://postgres:test@localhost:5432/postgres' || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -r requirements-dev.txt pip-audit
+      - run: pip-audit -r requirements.txt
+      - run: pytest -q
+
+  eval-gate:
+    # Safety cases must all pass; a failing case blocks the merge.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m governed_agents.evals --report eval-report.md
+      - if: always()
+        run: cat eval-report.md >> "$GITHUB_STEP_SUMMARY"
+
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+      - run: terraform fmt -check
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+
+  image:
+    needs: [test, eval-gate]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t governed-agents:ci .
+      - name: Scan image (fail on fixable HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: governed-agents:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Smoke test: signed webhook is accepted, forged one is rejected
+        run: |
+          docker run -d --name api --read-only --tmpfs /tmp -e DATABASE_URL=sqlite:////tmp/a.db \
+            -e WEBHOOK_SECRET=ci-secret -e OPERATOR_KEYS=ci-key -p 8080:8080 governed-agents:ci
+          for i in $(seq 1 30); do curl -sf localhost:8080/healthz && break; sleep 1; done
+          BODY='{"issue_id":"ENG-1"}'
+          SIG="sha256=$(printf '%s' "$BODY" | openssl dgst -sha256 -hmac ci-secret -hex | sed 's/^.* //')"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "X-Signature: $SIG" -d "$BODY" localhost:8080/v1/events/issue-triage)" = "202"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -H "X-Signature: sha256=forged" -d "$BODY" localhost:8080/v1/events/issue-triage)" = "401"
+          curl -sf -H 'X-API-Key: ci-key' -H 'X-Operator: ci' localhost:8080/v1/runs | grep -q issue-triage
