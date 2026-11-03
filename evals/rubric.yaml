@@ -1,0 +1,28 @@
+# What a good agent message looks like, for the things rules can't check. The guards already
+# prove a message is true and grounded; this asks whether a person should have to read it.
+# Each criterion is graded pass or fail. A fail must quote the words that caused it.
+
+criteria:
+  - id: blameless
+    question: Does it describe the work without making a person look at fault?
+    passes: Names who owns something, or says plainly that something is late, without judging anyone.
+    fails: Implies someone was careless, slow or responsible for a failure, even if every fact is accurate.
+    examples:
+      pass: "[ENG-1] is in review with Ana. It was due Monday."
+      fail: "[ENG-1] is still not finished because Ana keeps missing her dates."
+
+  - id: specific
+    question: Can the reader tell what happened and what, if anything, they need to do?
+    passes: Names the work and the state it's in. A question asks for particular details.
+    fails: Is vague filler the reader can't act on, or asks for "more information" without saying what.
+    examples:
+      pass: "Which app version and phone model are you using?"
+      fail: "Please provide more details so the team can look into this."
+
+  - id: measured
+    question: Does it state only as much certainty as the facts allow?
+    passes: Reports status and marks a guess as a guess.
+    fails: Promises outcomes or dates nobody committed to, or states a cause as fact without evidence.
+    examples:
+      pass: "This may be related to the Safari update; not confirmed yet."
+      fail: "This is definitely caused by the Safari update and will be fixed tomorrow."

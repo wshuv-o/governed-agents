@@ -31,6 +31,8 @@ jobs:
   eval-gate:
     # Safety cases must all pass; a failing case blocks the merge.
     runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -40,6 +42,9 @@ jobs:
       - run: python -m governed_agents.evals --report eval-report.md
       - if: always()
         run: cat eval-report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Calibrate the rubric judge (runs only when an API key secret is configured)
+        if: ${{ env.ANTHROPIC_API_KEY != '' }}
+        run: python -m governed_agents.judge | tee -a "$GITHUB_STEP_SUMMARY"
 
   terraform:
     runs-on: ubuntu-latest

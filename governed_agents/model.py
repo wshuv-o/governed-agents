@@ -124,11 +124,13 @@ class Scripted:
         return self._replies.pop(0)
 
 
-def from_env() -> Model:
+def from_env(name_var: str = "MODEL_NAME") -> Model:
+    """name_var lets the judge run a different model from the agents it grades."""
     provider = os.environ.get("MODEL_PROVIDER", "anthropic")
+    name = os.environ.get(name_var) or os.environ.get("MODEL_NAME")
     if provider == "anthropic":
-        return Anthropic(os.environ.get("MODEL_NAME", "claude-haiku-5-5"), os.environ["ANTHROPIC_API_KEY"])
-    return OpenAICompatible(os.environ.get("MODEL_NAME", "gpt-4.1-mini"),
+        return Anthropic(name or "claude-haiku-5-5", os.environ["ANTHROPIC_API_KEY"])
+    return OpenAICompatible(name or "gpt-4.1-mini",
                             os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
                             os.environ["OPENAI_API_KEY"])
 
